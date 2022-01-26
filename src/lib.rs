@@ -1,3 +1,5 @@
+use std::convert;
+
 struct Element {
     name: String,
     attributes: Vec<(String, String)>,
@@ -40,13 +42,21 @@ where
     P1: Fn(&str) -> Result<(&str, R1), &str>,
     P2: Fn(&str) -> Result<(&str, R2), &str>,
 {
-    move |input| match parser1(input) {
-        Ok((next_input, result1)) => match parser2(next_input) {
-            Ok((final_input, result2)) => Ok((final_input, (result1, result2))),
-            Err(err) => Err(err),
-        },
-        Err(err) => Err(err),
+    move |input| {
+        parser1(input)
+            .map(|(next_input, result1)| {
+                parser2(next_input).map(|(final_input, result2)| (final_input, (result1, result2)))
+            })
+            .and_then(convert::identity)
     }
+}
+
+pub fn map<P, F, A, B>(parser: P, map_fn: F) -> impl Fn(&str) -> Result<(&str, B), &str>
+where
+    P: Fn(&str) -> Result<(&str, A), &str>,
+    F: Fn(A) -> B,
+{
+    move |input| parser(input).map(|(next_input, result)| (next_input, map_fn(result)))
 }
 
 #[test]
