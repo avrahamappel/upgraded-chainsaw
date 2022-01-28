@@ -126,14 +126,6 @@ fn whitespace_char<'a>() -> impl Parser<'a, char> {
     pred(parse_any_char, |c| c.is_whitespace())
 }
 
-fn one_or_more_whitespace<'a>() -> impl Parser<'a, Vec<char>> {
-    one_or_more(whitespace_char())
-}
-
-fn zero_or_more_whitespace<'a>() -> impl Parser<'a, Vec<char>> {
-    zero_or_more(whitespace_char())
-}
-
 fn quoted_string<'a>() -> impl Parser<'a, String> {
     map(
         right(
@@ -171,6 +163,14 @@ fn parse_identifier(input: &str) -> ParseResult<String> {
     }
 
     Ok((&input[matched.len()..], matched))
+}
+
+fn attribute_pair<'a>() -> impl Parser<'a, (String, String)> {
+    pair(parse_identifier, right(match_literal("="), quoted_string()))
+}
+
+fn attributes<'a>() -> impl Parser<'a, Vec<(String, String)>> {
+    zero_or_more(right(one_or_more(whitespace_char()), attribute_pair()))
 }
 
 #[cfg(test)]
@@ -246,5 +246,20 @@ mod tests {
             parser.parse("\"Hello world\"")
         );
         assert_eq!(Ok(("", "".to_string())), parser.parse("\"\""));
+    }
+
+    #[test]
+    fn attributes_parser() {
+        let parser = attributes();
+        assert_eq!(
+            Ok((
+                "",
+                vec![
+                    ("foo".to_string(), "FOO".to_string()),
+                    ("bar".to_string(), "BAR".to_string())
+                ]
+            )),
+            parser.parse(" foo=\"FOO\" bar=\"BAR\"")
+        )
     }
 }
