@@ -100,6 +100,21 @@ where
     }
 }
 
+fn pred<'a, P, F, A>(parser: P, predicate: F) -> impl Parser<'a, A>
+where
+    P: Parser<'a, A>,
+    F: Fn(&A) -> bool,
+{
+    move |input| {
+        if let Ok((next_input, result)) = parser.parse(input) {
+            if predicate(&result) {
+                return Ok((next_input, result));
+            }
+        }
+        Err(input)
+    }
+}
+
 fn match_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
     move |input: &'a str| match input.get(..expected.len()) {
         Some(next) if next == expected => Ok((&input[expected.len()..], ())),
@@ -107,7 +122,14 @@ fn match_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
     }
 }
 
-fn identifier(input: &str) -> ParseResult<String> {
+fn parse_any_char(input: &str) -> ParseResult<char> {
+    match input.chars().next() {
+        Some(next) => Ok((&input[next.len_utf8()..], next)),
+        _ => Err(input),
+    }
+}
+
+fn parse_identifier(input: &str) -> ParseResult<String> {
     let mut matched = String::new();
     let mut chars = input.chars();
 
@@ -141,21 +163,21 @@ fn literal_parser() {
 fn identifier_parser() {
     assert_eq!(
         Ok(("", "i-am-an-identifier".to_string())),
-        identifier("i-am-an-identifier")
+        parse_identifier("i-am-an-identifier")
     );
     assert_eq!(
         Ok((" entirely an identifier", "not".to_string())),
-        identifier("not entirely an identifier")
+        parse_identifier("not entirely an identifier")
     );
     assert_eq!(
         Err("!not at all an identifier"),
-        identifier("!not at all an identifier")
+        parse_identifier("!not at all an identifier")
     );
 }
 
 #[test]
 fn right_combinator() {
-    let tag_opener = right(match_literal("<"), identifier);
+    let tag_opener = right(match_literal("<"), parse_identifier);
     assert_eq!(
         Ok(("/>", "my-first-element".to_string())),
         tag_opener.parse("<my-first-element/>")
@@ -178,4 +200,11 @@ fn zero_or_more_combinator() {
     assert_eq!(Ok(("", vec![(), (), ()])), parser.parse("hahaha"));
     assert_eq!(Ok(("ahah", vec![])), parser.parse("ahah"));
     assert_eq!(Ok(("", vec![])), parser.parse(""));
+}
+
+#[test]
+fn predicate_combinator() {
+    let parser = pred(parse_any_char, |c| c == &'o');
+    assert_eq!(Ok(("mg", 'o')), parser.parse("omg"));
+    assert_eq!(Err("lol"), parser.parse("lol"));
 }
