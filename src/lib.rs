@@ -1,3 +1,4 @@
+#[derive(Debug, PartialEq)]
 struct Element {
     name: String,
     attributes: Vec<(String, String)>,
@@ -173,6 +174,21 @@ fn attributes<'a>() -> impl Parser<'a, Vec<(String, String)>> {
     zero_or_more(right(one_or_more(whitespace_char()), attribute_pair()))
 }
 
+fn element_start<'a>() -> impl Parser<'a, (String, Vec<(String, String)>)> {
+    right(match_literal("<"), pair(parse_identifier, attributes()))
+}
+
+fn single_element<'a>() -> impl Parser<'a, Element> {
+    map(
+        left(element_start(), match_literal("/>")),
+        |(name, attributes)| Element {
+            name,
+            attributes,
+            children: vec![],
+        },
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,7 +275,23 @@ mod tests {
                     ("bar".to_string(), "BAR".to_string())
                 ]
             )),
-            parser.parse(" foo=\"FOO\" bar=\"BAR\"")
+            parser.parse(r#" foo="FOO" bar="BAR""#)
+        )
+    }
+
+    #[test]
+    fn single_element_parser() {
+        let parser = single_element();
+        assert_eq!(
+            (
+                "",
+                Element {
+                    name: "div".to_string(),
+                    attributes: vec![("class".to_string(), "float".to_string())],
+                    children: vec![]
+                },
+            ),
+            parser.parse(r#"<div class="float"/>"#).unwrap()
         )
     }
 }
