@@ -122,6 +122,31 @@ fn match_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
     }
 }
 
+fn whitespace_char<'a>() -> impl Parser<'a, char> {
+    pred(parse_any_char, |c| c.is_whitespace())
+}
+
+fn one_or_more_whitespace<'a>() -> impl Parser<'a, Vec<char>> {
+    one_or_more(whitespace_char())
+}
+
+fn zero_or_more_whitespace<'a>() -> impl Parser<'a, Vec<char>> {
+    zero_or_more(whitespace_char())
+}
+
+fn quoted_string<'a>() -> impl Parser<'a, String> {
+    map(
+        right(
+            match_literal("\""),
+            left(
+                zero_or_more(pred(parse_any_char, |c| c != &'"')),
+                match_literal("\""),
+            ),
+        ),
+        |cs| cs.iter().collect(),
+    )
+}
+
 fn parse_any_char(input: &str) -> ParseResult<char> {
     match input.chars().next() {
         Some(next) => Ok((&input[next.len_utf8()..], next)),
@@ -148,63 +173,78 @@ fn parse_identifier(input: &str) -> ParseResult<String> {
     Ok((&input[matched.len()..], matched))
 }
 
-#[test]
-fn literal_parser() {
-    let parse_joe = match_literal("Hello Joe!");
-    assert_eq!(Ok(("", ())), parse_joe.parse("Hello Joe!"));
-    assert_eq!(
-        Ok((" Hello Robert!", ())),
-        parse_joe.parse("Hello Joe! Hello Robert!")
-    );
-    assert_eq!(Err("Hello Mike!"), parse_joe.parse("Hello Mike!"));
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn identifier_parser() {
-    assert_eq!(
-        Ok(("", "i-am-an-identifier".to_string())),
-        parse_identifier("i-am-an-identifier")
-    );
-    assert_eq!(
-        Ok((" entirely an identifier", "not".to_string())),
-        parse_identifier("not entirely an identifier")
-    );
-    assert_eq!(
-        Err("!not at all an identifier"),
-        parse_identifier("!not at all an identifier")
-    );
-}
+    #[test]
+    fn literal_parser() {
+        let parse_joe = match_literal("Hello Joe!");
+        assert_eq!(Ok(("", ())), parse_joe.parse("Hello Joe!"));
+        assert_eq!(
+            Ok((" Hello Robert!", ())),
+            parse_joe.parse("Hello Joe! Hello Robert!")
+        );
+        assert_eq!(Err("Hello Mike!"), parse_joe.parse("Hello Mike!"));
+    }
 
-#[test]
-fn right_combinator() {
-    let tag_opener = right(match_literal("<"), parse_identifier);
-    assert_eq!(
-        Ok(("/>", "my-first-element".to_string())),
-        tag_opener.parse("<my-first-element/>")
-    );
-    assert_eq!(Err("oops"), tag_opener.parse("oops"));
-    assert_eq!(Err("!oops"), tag_opener.parse("<!oops"));
-}
+    #[test]
+    fn identifier_parser() {
+        assert_eq!(
+            Ok(("", "i-am-an-identifier".to_string())),
+            parse_identifier("i-am-an-identifier")
+        );
+        assert_eq!(
+            Ok((" entirely an identifier", "not".to_string())),
+            parse_identifier("not entirely an identifier")
+        );
+        assert_eq!(
+            Err("!not at all an identifier"),
+            parse_identifier("!not at all an identifier")
+        );
+    }
 
-#[test]
-fn one_or_more_combinator() {
-    let parser = one_or_more(match_literal("ha"));
-    assert_eq!(Ok(("", vec![(), (), ()])), parser.parse("hahaha"));
-    assert_eq!(Err("ahah"), parser.parse("ahah"));
-    assert_eq!(Err(""), parser.parse(""));
-}
+    #[test]
+    fn right_combinator() {
+        let tag_opener = right(match_literal("<"), parse_identifier);
+        assert_eq!(
+            Ok(("/>", "my-first-element".to_string())),
+            tag_opener.parse("<my-first-element/>")
+        );
+        assert_eq!(Err("oops"), tag_opener.parse("oops"));
+        assert_eq!(Err("!oops"), tag_opener.parse("<!oops"));
+    }
 
-#[test]
-fn zero_or_more_combinator() {
-    let parser = zero_or_more(match_literal("ha"));
-    assert_eq!(Ok(("", vec![(), (), ()])), parser.parse("hahaha"));
-    assert_eq!(Ok(("ahah", vec![])), parser.parse("ahah"));
-    assert_eq!(Ok(("", vec![])), parser.parse(""));
-}
+    #[test]
+    fn one_or_more_combinator() {
+        let parser = one_or_more(match_literal("ha"));
+        assert_eq!(Ok(("", vec![(), (), ()])), parser.parse("hahaha"));
+        assert_eq!(Err("ahah"), parser.parse("ahah"));
+        assert_eq!(Err(""), parser.parse(""));
+    }
 
-#[test]
-fn predicate_combinator() {
-    let parser = pred(parse_any_char, |c| c == &'o');
-    assert_eq!(Ok(("mg", 'o')), parser.parse("omg"));
-    assert_eq!(Err("lol"), parser.parse("lol"));
+    #[test]
+    fn zero_or_more_combinator() {
+        let parser = zero_or_more(match_literal("ha"));
+        assert_eq!(Ok(("", vec![(), (), ()])), parser.parse("hahaha"));
+        assert_eq!(Ok(("ahah", vec![])), parser.parse("ahah"));
+        assert_eq!(Ok(("", vec![])), parser.parse(""));
+    }
+
+    #[test]
+    fn predicate_combinator() {
+        let parser = pred(parse_any_char, |c| c == &'o');
+        assert_eq!(Ok(("mg", 'o')), parser.parse("omg"));
+        assert_eq!(Err("lol"), parser.parse("lol"));
+    }
+
+    #[test]
+    fn quoted_string_parser() {
+        let parser = quoted_string();
+        assert_eq!(
+            Ok(("", "Hello world".to_string())),
+            parser.parse("\"Hello world\"")
+        );
+        assert_eq!(Ok(("", "".to_string())), parser.parse("\"\""));
+    }
 }
