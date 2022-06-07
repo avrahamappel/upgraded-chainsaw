@@ -133,11 +133,14 @@ where
     move |mut input| {
         let mut results = Vec::new();
 
-        if let Ok((next_input, result)) = parser.parse(input) {
-            input = next_input;
-            results.push(result);
-        } else {
-            return Err(input);
+        match parser.parse(input) {
+            Ok((next_input, result)) => {
+                input = next_input;
+                results.push(result);
+            }
+            error @ Err(_) => {
+                return error;
+            }
         }
 
         while let Ok((next_input, result)) = parser.parse(input) {
@@ -170,13 +173,10 @@ where
     P: Parser<'a, A>,
     F: Fn(&A) -> bool,
 {
-    move |input| {
-        if let Ok((next_input, result)) = parser.parse(input) {
-            if predicate(&result) {
-                return Ok((next_input, result));
-            }
-        }
-        Err(input)
+    move |input| match parser.parse(input) {
+        Ok((next_input, result)) if predicate(&result) => Ok((next_input, result)),
+        error @ Err(_) => error,
+        // _ => Err(input),
     }
 }
 

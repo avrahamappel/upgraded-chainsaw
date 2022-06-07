@@ -61,7 +61,7 @@ fn element_start<'a>() -> impl Parser<'a, (String, Vec<(String, String)>)> {
 }
 
 fn single_element<'a>() -> impl Parser<'a, Element> {
-    left(element_start(), match_literal("/>")).map(|(name, attributes)| Element {
+    left(element_start(), whitespace_wrap(match_literal("/>"))).map(|(name, attributes)| Element {
         name,
         attributes,
         children: vec![],
@@ -113,17 +113,6 @@ pub fn element<'a>() -> impl Parser<'a, Element> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn literal_parser() {
-        let parse_joe = match_literal("Hello Joe!");
-        assert_eq!(Ok(("", ())), parse_joe.parse("Hello Joe!"));
-        assert_eq!(
-            Ok((" Hello Robert!", ())),
-            parse_joe.parse("Hello Joe! Hello Robert!")
-        );
-        assert_eq!(Err("Hello Mike!"), parse_joe.parse("Hello Mike!"));
-    }
 
     #[test]
     fn identifier_parser() {
@@ -213,6 +202,22 @@ mod tests {
                 },
             ),
             parser.parse(r#"<div class="float"/>"#).unwrap()
+        )
+    }
+
+    #[test]
+    fn self_closing_element_with_space() {
+        let parser = element();
+        assert_eq!(
+            Ok((
+                "",
+                Element {
+                    name: String::from("crunchy-element"),
+                    attributes: vec![],
+                    children: vec![]
+                }
+            )),
+            parser.parse(r#"<crunchy-element />"#)
         )
     }
 
